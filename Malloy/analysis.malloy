@@ -1,0 +1,406 @@
+source: submissions is duckdb.table('data/SUBMISSION.tsv') extend {
+  primary_key: ACCESSION_NUMBER
+
+  dimension: filing_year is substr(FILING_DATE, 8, 4)
+  dimension: report_year is substr(PERIOD_OF_REPORT, 8, 4)
+  dimension: issuer_name is ISSUERNAME
+  dimension: ticker is ISSUERTRADINGSYMBOL
+  dimension: document_type is DOCUMENT_TYPE
+
+  measure: total_filings is count()
+}
+
+source: reporting_owners is duckdb.table('data/REPORTINGOWNER.tsv') extend {
+  dimension: owner_name is RPTOWNERNAME
+  dimension: owner_cik is RPTOWNERCIK
+  dimension: owner_relationship is RPTOWNER_RELATIONSHIP
+  dimension: owner_title is RPTOWNER_TITLE
+  dimension: owner_state is RPTOWNER_STATE
+  dimension: owner_city is RPTOWNER_CITY
+
+  measure: total_owners is count()
+}
+
+source: owner_signatures is duckdb.table('data/OWNER_SIGNATURE.tsv') extend {
+  dimension: signer_name is OWNERSIGNATURENAME
+  dimension: signature_year is substr(OWNERSIGNATUREDATE, 8, 4)
+
+  measure: total_signatures is count()
+}
+
+source: footnotes is duckdb.table('data/FOOTNOTES.tsv') extend {
+  dimension: footnote_id is FOOTNOTE_ID
+  dimension: footnote_text is FOOTNOTE_TXT
+
+  measure: total_footnotes is count()
+}
+
+source: nonderiv_trans is duckdb.table('data/NONDERIV_TRANS.tsv') extend {
+  dimension: trans_year is substr(TRANS_DATE, 8, 4)
+  dimension: trans_month is substr(TRANS_DATE, 4, 3)
+  dimension: transaction_type is TRANS_ACQUIRED_DISP_CD
+  dimension: transaction_code is TRANS_CODE
+  dimension: security_title is SECURITY_TITLE
+  dimension: ownership_type is DIRECT_INDIRECT_OWNERSHIP
+  dimension: nature_of_ownership is NATURE_OF_OWNERSHIP
+
+  measure: total_transactions is count()
+  measure: total_shares is sum(TRANS_SHARES)
+  measure: avg_shares is avg(TRANS_SHARES)
+  measure: avg_price is avg(TRANS_PRICEPERSHARE)
+  measure: estimated_total_value is sum(TRANS_SHARES * TRANS_PRICEPERSHARE)
+  measure: avg_estimated_trade_value is avg(TRANS_SHARES * TRANS_PRICEPERSHARE)
+  measure: estimated_trade_value is sum(TRANS_SHARES * TRANS_PRICEPERSHARE)
+
+  join_one: submissions on ACCESSION_NUMBER = submissions.ACCESSION_NUMBER
+  join_many: reporting_owners on ACCESSION_NUMBER = reporting_owners.ACCESSION_NUMBER
+  join_many: owner_signatures on ACCESSION_NUMBER = owner_signatures.ACCESSION_NUMBER
+  join_many: footnotes on ACCESSION_NUMBER = footnotes.ACCESSION_NUMBER
+}
+
+source: deriv_trans is duckdb.table('data/DERIV_TRANS.tsv') extend {
+  dimension: trans_year is substr(TRANS_DATE, 8, 4)
+  dimension: trans_month is substr(TRANS_DATE, 4, 3)
+  dimension: transaction_type is TRANS_ACQUIRED_DISP_CD
+  dimension: transaction_code is TRANS_CODE
+  dimension: security_title is SECURITY_TITLE
+  dimension: underlying_security is UNDLYNG_SEC_TITLE
+  dimension: ownership_type is DIRECT_INDIRECT_OWNERSHIP
+
+  measure: total_transactions is count()
+  measure: total_shares is sum(TRANS_SHARES)
+  measure: total_value is sum(TRANS_TOTAL_VALUE)
+  measure: avg_trade_value is avg(TRANS_TOTAL_VALUE)
+  measure: avg_price is avg(TRANS_PRICEPERSHARE)
+
+  join_one: submissions on ACCESSION_NUMBER = submissions.ACCESSION_NUMBER
+  join_many: reporting_owners on ACCESSION_NUMBER = reporting_owners.ACCESSION_NUMBER
+  join_many: owner_signatures on ACCESSION_NUMBER = owner_signatures.ACCESSION_NUMBER
+  join_many: footnotes on ACCESSION_NUMBER = footnotes.ACCESSION_NUMBER
+}
+
+source: nonderiv_holdings is duckdb.table('data/NONDERIV_HOLDING.tsv') extend {
+  dimension: security_title is SECURITY_TITLE
+  dimension: ownership_type is DIRECT_INDIRECT_OWNERSHIP
+  dimension: nature_of_ownership is NATURE_OF_OWNERSHIP
+
+  measure: total_holdings is count()
+  measure: total_shares_owned is sum(SHRS_OWND_FOLWNG_TRANS)
+  measure: total_value_owned is sum(VALU_OWND_FOLWNG_TRANS)
+  measure: avg_shares_owned is avg(SHRS_OWND_FOLWNG_TRANS)
+
+  join_one: submissions on ACCESSION_NUMBER = submissions.ACCESSION_NUMBER
+  join_many: reporting_owners on ACCESSION_NUMBER = reporting_owners.ACCESSION_NUMBER
+}
+
+source: deriv_holdings is duckdb.table('data/DERIV_HOLDING.tsv') extend {
+  dimension: security_title is SECURITY_TITLE
+  dimension: underlying_security is UNDLYNG_SEC_TITLE
+  dimension: ownership_type is DIRECT_INDIRECT_OWNERSHIP
+  dimension: nature_of_ownership is NATURE_OF_OWNERSHIP
+
+  measure: total_holdings is count()
+  measure: underlying_shares is sum(UNDLYNG_SEC_SHARES)
+  measure: shares_owned_after is sum(SHRS_OWND_FOLWNG_TRANS)
+  measure: value_owned_after is sum(VALU_OWND_FOLWNG_TRANS)
+
+  join_one: submissions on ACCESSION_NUMBER = submissions.ACCESSION_NUMBER
+  join_many: reporting_owners on ACCESSION_NUMBER = reporting_owners.ACCESSION_NUMBER
+}
+
+-- 1. How many total SEC ownership filings are in the dataset?
+run: submissions -> {
+  aggregate:
+    total_filings
+}
+
+-- 2. What filing types are most common?
+run: submissions -> {
+  group_by:
+    document_type
+  aggregate:
+    total_filings
+  order_by:
+    total_filings desc
+}
+
+-- 3. Which companies have the most insider filings?
+run: submissions -> {
+  group_by:
+    issuer_name,
+    ticker
+  aggregate:
+    total_filings
+  order_by:
+    total_filings desc
+  limit: 20
+}
+
+-- 4. How have insider filings changed by year?
+run: submissions -> {
+  group_by:
+    filing_year
+  aggregate:
+    total_filings
+  order_by:
+    filing_year
+}
+
+-- 5. Which insiders appear most often?
+run: reporting_owners -> {
+  group_by:
+    owner_name,
+    owner_title,
+    owner_state
+  aggregate:
+    total_owners
+  order_by:
+    total_owners desc
+  limit: 20
+}
+
+-- 6. What owner relationships are most common?
+run: reporting_owners -> {
+  group_by:
+    owner_relationship
+  aggregate:
+    total_owners
+  order_by:
+    total_owners desc
+}
+
+-- 7. Which signatures appear most often?
+run: owner_signatures -> {
+  group_by:
+    signer_name
+  aggregate:
+    total_signatures
+  order_by:
+    total_signatures desc
+  limit: 20
+}
+
+-- 8. How many footnotes are attached to filings?
+run: footnotes -> {
+  aggregate:
+    total_footnotes
+}
+
+-- 9. Which filings have the most footnotes?
+run: footnotes -> {
+  group_by:
+    ACCESSION_NUMBER
+  aggregate:
+    total_footnotes
+  order_by:
+    total_footnotes desc
+  limit: 20
+}
+
+-- 10. Are non-derivative insiders acquiring or disposing more often?
+run: nonderiv_trans -> {
+  group_by:
+    transaction_type
+  aggregate:
+    total_transactions,
+    total_shares,
+    estimated_total_value
+  order_by:
+    total_transactions desc
+}
+
+-- 11. Are derivative insiders acquiring or disposing more often?
+run: deriv_trans -> {
+  group_by:
+    transaction_type
+  aggregate:
+    total_transactions,
+    total_shares,
+    total_value
+  order_by:
+    total_transactions desc
+}
+
+-- 12. Which non-derivative transaction codes appear most often?
+run: nonderiv_trans -> {
+  group_by:
+    transaction_code
+  aggregate:
+    total_transactions,
+    estimated_total_value
+  order_by:
+    total_transactions desc
+  limit: 15
+}
+
+-- 13. Which derivative transaction codes appear most often?
+run: deriv_trans -> {
+  group_by:
+    transaction_code
+  aggregate:
+    total_transactions,
+    total_value
+  order_by:
+    total_transactions desc
+  limit: 15
+}
+
+-- 14. Which companies have the highest estimated non-derivative transaction value?
+run: nonderiv_trans -> {
+  group_by:
+    submissions.issuer_name,
+    submissions.ticker
+  aggregate:
+    total_transactions,
+    estimated_total_value
+  order_by:
+    estimated_total_value desc
+  limit: 20
+}
+
+-- 15. Which companies have the highest derivative transaction value?
+run: deriv_trans -> {
+  group_by:
+    submissions.issuer_name,
+    submissions.ticker
+  aggregate:
+    total_transactions,
+    total_value
+  order_by:
+    total_value desc
+  limit: 20
+}
+
+-- 16. What are the largest individual non-derivative transactions?
+run: nonderiv_trans -> {
+  select:
+    TRANS_DATE,
+    submissions.issuer_name,
+    submissions.ticker,
+    reporting_owners.owner_name,
+    transaction_type,
+    transaction_code,
+    TRANS_SHARES,
+    TRANS_PRICEPERSHARE,
+    estimated_value is TRANS_SHARES * TRANS_PRICEPERSHARE
+
+  order_by:
+    estimated_value desc
+
+  limit: 20
+}
+
+-- 17. What are the largest individual derivative transactions?
+run: deriv_trans -> {
+  select:
+    TRANS_DATE,
+    submissions.issuer_name,
+    submissions.ticker,
+    reporting_owners.owner_name,
+    transaction_type,
+    transaction_code,
+    TRANS_SHARES,
+    TRANS_PRICEPERSHARE,
+    TRANS_TOTAL_VALUE
+  order_by:
+    TRANS_TOTAL_VALUE desc
+  limit: 20
+}
+
+-- 18. How does non-derivative transaction activity change by year?
+run: nonderiv_trans -> {
+  group_by:
+    trans_year
+  aggregate:
+    total_transactions,
+    estimated_total_value
+  order_by:
+    trans_year
+}
+
+-- 19. How does derivative transaction activity change by year?
+run: deriv_trans -> {
+  group_by:
+    trans_year
+  aggregate:
+    total_transactions,
+    total_value
+  order_by:
+    trans_year
+}
+
+-- 20. What security titles appear most often in non-derivative transactions?
+run: nonderiv_trans -> {
+  group_by:
+    security_title
+  aggregate:
+    total_transactions,
+    estimated_total_value
+  order_by:
+    total_transactions desc
+  limit: 20
+}
+
+-- 21. What derivative securities appear most often?
+run: deriv_trans -> {
+  group_by:
+    security_title,
+    underlying_security
+  aggregate:
+    total_transactions,
+    total_value
+  order_by:
+    total_transactions desc
+  limit: 20
+}
+
+-- 22. Direct vs indirect ownership in non-derivative transactions
+run: nonderiv_trans -> {
+  group_by:
+    ownership_type
+  aggregate:
+    total_transactions,
+    estimated_total_value
+  order_by:
+    total_transactions desc
+}
+
+-- 23. Direct vs indirect ownership in derivative transactions
+run: deriv_trans -> {
+  group_by:
+    ownership_type
+  aggregate:
+    total_transactions,
+    total_value
+  order_by:
+    total_transactions desc
+}
+
+-- 24. Which companies have the largest non-derivative holdings after transactions?
+run: nonderiv_holdings -> {
+  group_by:
+    submissions.issuer_name,
+    submissions.ticker
+  aggregate:
+    total_holdings,
+    total_shares_owned,
+    total_value_owned
+  order_by:
+    total_shares_owned desc
+  limit: 20
+}
+
+-- 25. Which companies have the largest derivative holdings?
+run: deriv_holdings -> {
+  group_by:
+    submissions.issuer_name,
+    submissions.ticker
+  aggregate:
+    total_holdings,
+    underlying_shares,
+    shares_owned_after,
+    value_owned_after
+  order_by:
+    underlying_shares desc
+  limit: 20
+}
