@@ -1,0 +1,13 @@
+I was curious whether corporate insiders reveal useful information through their SEC ownership filings.
+
+First, I looked at what types of filings were most common. That helped me understand whether the dataset was mostly static ownership reports or actual changes in ownership.
+
+Then I looked at which companies appeared most often. This showed that insider activity is not spread evenly across all companies.
+
+Next, I compared acquisitions and dispositions. I expected insider buying to stand out, but the data showed that disposals were much more common.
+
+That led me to ask whether transaction count was misleading. When I ranked companies and transactions by estimated dollar value, I found that a small number of high-value transactions dominated the dataset.
+
+Finally, I looked at activity over time to see whether insider trading patterns changed by year.
+
+The biggest lesson was that insider trading data cannot be interpreted at face value. Insider selling is common and may be routine, while insider buying may be a stronger signal because it is less frequent and more deliberate.
